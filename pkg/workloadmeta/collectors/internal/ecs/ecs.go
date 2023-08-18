@@ -146,7 +146,7 @@ func (c *collector) parseTasks(ctx context.Context, tasks []v1.Task) []workloadm
 			Containers:  taskContainers,
 		}
 
-		if c.hasResourceTags {
+		if false {
 			rt := c.getResourceTags(ctx, entity)
 			entity.ContainerInstanceTags = rt.containerInstanceTags
 			entity.Tags = rt.tags
