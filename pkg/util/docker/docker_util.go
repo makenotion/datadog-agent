@@ -348,8 +348,8 @@ func (d *DockerUtil) ReadFlavorFile(ctx context.Context, containerId string) (st
 	if _, err := tarReader.Next(); err != nil {
 		return "", err
 	}
-	flavorBytes := make([]byte, 0)
-	if _, err := tarReader.Read(flavorBytes); err != nil {
+	flavorBytes, err := io.ReadAll(tarReader)
+	if err != nil {
 		return "", err
 	}
 	flavorString := strings.TrimSpace(string(flavorBytes))
