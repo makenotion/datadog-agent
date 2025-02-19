@@ -107,13 +107,22 @@ func (f *flavors) Run(ctx context.Context, c *collector) {
 			time.Sleep(time.Second)
 			flavor, err := c.dockerUtil.ReadFlavorFile(ctx, containerId)
 			if err != nil {
-				log.Warnf("flavors: error getting flavor from container %s: %v", containerId, err)
+				log.Warnf("flavors: error getting flavor from container %s: %s", containerId, err.Error())
 				continue
 			}
 			log.Infof("flavors: read flavor from container %s: %v", containerId, flavor)
 			f.mutex.Lock()
 			f.containerIdToFlavor[containerId] = flavor
 			f.mutex.Unlock()
+			ev, err := c.buildCollectorEvent(ctx, &docker.ContainerEvent{
+				ContainerID: containerId,
+				Action:      events.ActionStart,
+			})
+			if err != nil {
+				log.Warnf("flavors: error building collector event for container %s: %s", containerId, err.Error())
+				continue
+			}
+			c.store.Notify([]workloadmeta.CollectorEvent{ev})
 		}
 	}
 }
