@@ -56,6 +56,13 @@ type flavors struct {
 	containerIdToFlavor map[string]string
 }
 
+func NewFlavors() flavors {
+	return flavors{
+		containerIds:        make(map[string]struct{}),
+		containerIdToFlavor: make(map[string]string),
+	}
+}
+
 func (f *flavors) AddContainer(containerId string) {
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
@@ -135,6 +142,7 @@ func NewCollector() (workloadmeta.CollectorProvider, error) {
 		Collector: &collector{
 			id:      collectorID,
 			catalog: workloadmeta.NodeAgent | workloadmeta.ProcessAgent,
+			flavors: NewFlavors(),
 		},
 	}, nil
 }
