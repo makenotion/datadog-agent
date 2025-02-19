@@ -64,12 +64,14 @@ func NewFlavors() flavors {
 }
 
 func (f *flavors) AddContainer(containerId string) {
+	log.Infof("flavors: add container %s", containerId)
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	f.containerIds[containerId] = struct{}{}
 }
 
 func (f *flavors) RemoveContainer(containerId string) {
+	log.Infof("flavors: remove container %s", containerId)
 	f.mutex.Lock()
 	defer f.mutex.Unlock()
 	delete(f.containerIds, containerId)
@@ -105,8 +107,10 @@ func (f *flavors) Run(ctx context.Context, c *collector) {
 			time.Sleep(time.Second)
 			flavor, err := c.dockerUtil.ReadFlavorFile(ctx, containerId)
 			if err != nil {
+				log.Warnf("flavors: error getting flavor from container %s: %v", containerId, err)
 				continue
 			}
+			log.Infof("flavors: read flavor from container %s: %v", containerId, flavor)
 			f.mutex.Lock()
 			f.containerIdToFlavor[containerId] = flavor
 			f.mutex.Unlock()
