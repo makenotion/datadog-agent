@@ -335,7 +335,6 @@ func (d *DockerUtil) Inspect(ctx context.Context, id string, withSize bool) (typ
 }
 
 // Reads the `/flavor` file from the container and returns its content as a string.
-// Returns `nil` when there is any problem reading the file.
 func (d *DockerUtil) ReadFlavorFile(ctx context.Context, containerId string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, d.queryTimeout)
 	defer cancel()
