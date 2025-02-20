@@ -107,12 +107,20 @@ func (f *flavors) Run(ctx context.Context, c *collector) {
 		if err := ctx.Err(); err != nil {
 			return
 		}
-		time.Sleep(time.Second)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
 		for _, containerId := range f.PendingContainerIds() {
 			if err := ctx.Err(); err != nil {
 				return
 			}
-			time.Sleep(time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
 			flavor, err := c.dockerUtil.ReadFlavorFile(ctx, containerId)
 			if err != nil {
 				log.Warnf("flavors: error getting flavor from container %s: %s", containerId, err.Error())
