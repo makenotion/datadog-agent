@@ -51,7 +51,7 @@ const imageEventActionSbom = events.Action("sbom")
 type resolveHook func(ctx context.Context, co types.ContainerJSON) (string, error)
 
 type flavors struct {
-	mutex               sync.Mutex
+	mutex               sync.RWMutex
 	containerIds        map[string]struct{}
 	containerIdToFlavor map[string]string
 }
@@ -79,8 +79,8 @@ func (f *flavors) RemoveContainer(containerId string) {
 }
 
 func (f *flavors) GetFlavor(containerId string) string {
-	f.mutex.Lock()
-	defer f.mutex.Unlock()
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
 	return f.containerIdToFlavor[containerId]
 }
 
@@ -91,14 +91,14 @@ func (f *flavors) Run(ctx context.Context, c *collector) {
 		}
 		time.Sleep(time.Second)
 
-		f.mutex.Lock()
+		f.mutex.RLock()
 		containerIds := make([]string, 0, len(f.containerIds))
 		for containerId := range f.containerIds {
 			if _, ok := f.containerIdToFlavor[containerId]; !ok {
 				containerIds = append(containerIds, containerId)
 			}
 		}
-		f.mutex.Unlock()
+		f.mutex.RUnlock()
 
 		for _, containerId := range containerIds {
 			if err := ctx.Err(); err != nil {
