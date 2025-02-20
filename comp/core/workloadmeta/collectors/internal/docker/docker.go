@@ -87,7 +87,7 @@ func (f *flavors) GetFlavor(containerId string) string {
 func (f *flavors) PendingContainerIds() []string {
 	f.mutex.RLock()
 	defer f.mutex.RUnlock()
-	containerIds := make([]string, 0, len(f.containerIds))
+	containerIds := make([]string, 0)
 	for containerId := range f.containerIds {
 		if _, ok := f.containerIdToFlavor[containerId]; !ok {
 			containerIds = append(containerIds, containerId)
