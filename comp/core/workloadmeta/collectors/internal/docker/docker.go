@@ -84,23 +84,25 @@ func (f *flavors) GetFlavor(containerId string) string {
 	return f.containerIdToFlavor[containerId]
 }
 
+func (f *flavors) PendingContainerIds() []string {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+	containerIds := make([]string, 0, len(f.containerIds))
+	for containerId := range f.containerIds {
+		if _, ok := f.containerIdToFlavor[containerId]; !ok {
+			containerIds = append(containerIds, containerId)
+		}
+	}
+	return containerIds
+}
+
 func (f *flavors) Run(ctx context.Context, c *collector) {
 	for {
 		if err := ctx.Err(); err != nil {
 			return
 		}
 		time.Sleep(time.Second)
-
-		f.mutex.RLock()
-		containerIds := make([]string, 0, len(f.containerIds))
-		for containerId := range f.containerIds {
-			if _, ok := f.containerIdToFlavor[containerId]; !ok {
-				containerIds = append(containerIds, containerId)
-			}
-		}
-		f.mutex.RUnlock()
-
-		for _, containerId := range containerIds {
+		for _, containerId := range f.PendingContainerIds() {
 			if err := ctx.Err(); err != nil {
 				return
 			}
