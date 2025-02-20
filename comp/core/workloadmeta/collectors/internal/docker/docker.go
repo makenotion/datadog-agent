@@ -84,6 +84,12 @@ func (f *flavors) GetFlavor(containerId string) string {
 	return f.containerIdToFlavor[containerId]
 }
 
+func (f *flavors) SetFlavor(containerId string, flavor string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.containerIdToFlavor[containerId] = flavor
+}
+
 func (f *flavors) PendingContainerIds() []string {
 	f.mutex.RLock()
 	defer f.mutex.RUnlock()
@@ -113,9 +119,7 @@ func (f *flavors) Run(ctx context.Context, c *collector) {
 				continue
 			}
 			log.Infof("flavors: read flavor from container %s: %v", containerId, flavor)
-			f.mutex.Lock()
-			f.containerIdToFlavor[containerId] = flavor
-			f.mutex.Unlock()
+			f.SetFlavor(containerId, flavor)
 			ev, err := c.buildCollectorEvent(ctx, &docker.ContainerEvent{
 				ContainerID: containerId,
 				Action:      events.ActionStart,
