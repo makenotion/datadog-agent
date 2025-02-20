@@ -104,18 +104,12 @@ func (f *flavors) PendingContainerIds() []string {
 
 func (f *flavors) Run(ctx context.Context, c *collector) {
 	for {
-		if err := ctx.Err(); err != nil {
-			return
-		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(time.Second):
 		}
 		for _, containerId := range f.PendingContainerIds() {
-			if err := ctx.Err(); err != nil {
-				return
-			}
 			select {
 			case <-ctx.Done():
 				return
