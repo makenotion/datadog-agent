@@ -8,6 +8,7 @@
 package docker
 
 import (
+	"archive/tar"
 	"context"
 	"encoding/json"
 	"errors"
@@ -331,6 +332,30 @@ func (d *DockerUtil) Inspect(ctx context.Context, id string, withSize bool) (typ
 	cache.Cache.Set(cacheKey, container, 10*time.Second)
 
 	return container, nil
+}
+
+// Reads the `/flavor` file from the container and returns its content as a string.
+func (d *DockerUtil) ReadFlavorFile(ctx context.Context, containerId string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, d.queryTimeout)
+	defer cancel()
+	readCloser, _, err := d.cli.CopyFromContainer(ctx, containerId, "/flavor")
+	if err != nil {
+		return "", err
+	}
+	defer readCloser.Close()
+	tarReader := tar.NewReader(readCloser)
+	if _, err := tarReader.Next(); err != nil {
+		return "", err
+	}
+	flavorBytes, err := io.ReadAll(tarReader)
+	if err != nil {
+		return "", err
+	}
+	flavorString := strings.TrimSpace(string(flavorBytes))
+	if flavorString == "" {
+		return "", errors.New("file is empty")
+	}
+	return flavorString, nil
 }
 
 // InspectNoCache returns a docker inspect object for a given container ID. It

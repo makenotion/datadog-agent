@@ -50,6 +50,91 @@ const imageEventActionSbom = events.Action("sbom")
 
 type resolveHook func(ctx context.Context, co types.ContainerJSON) (string, error)
 
+type flavors struct {
+	mutex               sync.RWMutex
+	containerIds        map[string]struct{}
+	containerIdToFlavor map[string]string
+}
+
+func NewFlavors() flavors {
+	return flavors{
+		containerIds:        make(map[string]struct{}),
+		containerIdToFlavor: make(map[string]string),
+	}
+}
+
+func (f *flavors) AddContainer(containerId string) {
+	log.Infof("flavors: add container %s", containerId)
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.containerIds[containerId] = struct{}{}
+}
+
+func (f *flavors) RemoveContainer(containerId string) {
+	log.Infof("flavors: remove container %s", containerId)
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	delete(f.containerIds, containerId)
+	delete(f.containerIdToFlavor, containerId)
+}
+
+func (f *flavors) GetFlavor(containerId string) string {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+	return f.containerIdToFlavor[containerId]
+}
+
+func (f *flavors) SetFlavor(containerId string, flavor string) {
+	f.mutex.Lock()
+	defer f.mutex.Unlock()
+	f.containerIdToFlavor[containerId] = flavor
+}
+
+func (f *flavors) PendingContainerIds() []string {
+	f.mutex.RLock()
+	defer f.mutex.RUnlock()
+	containerIds := make([]string, 0)
+	for containerId := range f.containerIds {
+		if _, ok := f.containerIdToFlavor[containerId]; !ok {
+			containerIds = append(containerIds, containerId)
+		}
+	}
+	return containerIds
+}
+
+func (f *flavors) Run(ctx context.Context, c *collector) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Second):
+		}
+		for _, containerId := range f.PendingContainerIds() {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(time.Second):
+			}
+			flavor, err := c.dockerUtil.ReadFlavorFile(ctx, containerId)
+			if err != nil {
+				log.Warnf("flavors: error getting flavor from container %s: %s", containerId, err.Error())
+				continue
+			}
+			log.Infof("flavors: read flavor from container %s: %v", containerId, flavor)
+			f.SetFlavor(containerId, flavor)
+			ev, err := c.buildCollectorEvent(ctx, &docker.ContainerEvent{
+				ContainerID: containerId,
+				Action:      events.ActionStart,
+			})
+			if err != nil {
+				log.Warnf("flavors: error building collector event for container %s: %s", containerId, err.Error())
+				continue
+			}
+			c.store.Notify([]workloadmeta.CollectorEvent{ev})
+		}
+	}
+}
+
 type collector struct {
 	id      string
 	store   workloadmeta.Component
@@ -68,6 +153,8 @@ type collector struct {
 
 	// SBOM Scanning
 	sbomScanner *scanner.Scanner //nolint: unused
+
+	flavors flavors
 }
 
 // NewCollector returns a new docker collector provider and an error
@@ -76,6 +163,7 @@ func NewCollector() (workloadmeta.CollectorProvider, error) {
 		Collector: &collector{
 			id:      collectorID,
 			catalog: workloadmeta.NodeAgent | workloadmeta.ProcessAgent,
+			flavors: NewFlavors(),
 		},
 	}, nil
 }
@@ -123,6 +211,7 @@ func (c *collector) Start(ctx context.Context, store workloadmeta.Component) err
 	}
 
 	go c.stream(ctx)
+	go c.flavors.Run(ctx, c)
 
 	return nil
 }
@@ -266,10 +355,12 @@ func (c *collector) buildCollectorEvent(ctx context.Context, ev *docker.Containe
 	case events.ActionStart, events.ActionRename, events.ActionHealthStatusRunning, events.ActionHealthStatusHealthy, events.ActionHealthStatusUnhealthy, events.ActionHealthStatus:
 		container, err := c.dockerUtil.InspectNoCache(ctx, ev.ContainerID, false)
 		if err != nil {
+			c.flavors.RemoveContainer(ev.ContainerID)
 			return event, fmt.Errorf("could not inspect container %q: %s", ev.ContainerID, err)
 		}
 
 		if ev.Action != events.ActionStart && !container.State.Running {
+			c.flavors.RemoveContainer(ev.ContainerID)
 			return event, fmt.Errorf("received event: %s on dead container: %q, discarding", ev.Action, ev.ContainerID)
 		}
 
@@ -296,7 +387,9 @@ func (c *collector) buildCollectorEvent(ctx context.Context, ev *docker.Containe
 				log.Debugf("Cannot parse FinishedAt %q for container %q: %s", container.State.FinishedAt, container.ID, err)
 			}
 		}
-
+		if flavor := c.flavors.GetFlavor(ev.ContainerID); flavor != "" {
+			container.Config.Labels["flavor"] = flavor
+		}
 		event.Type = workloadmeta.EventTypeSet
 		event.Entity = &workloadmeta.Container{
 			EntityID: entityID,
@@ -321,6 +414,7 @@ func (c *collector) buildCollectorEvent(ctx context.Context, ev *docker.Containe
 			PID:          container.State.Pid,
 			RestartCount: container.RestartCount,
 		}
+		c.flavors.AddContainer(ev.ContainerID)
 
 	case events.ActionDie, docker.ActionDied:
 		var exitCode *int64
@@ -342,6 +436,7 @@ func (c *collector) buildCollectorEvent(ctx context.Context, ev *docker.Containe
 				ExitCode:   exitCode,
 			},
 		}
+		c.flavors.RemoveContainer(ev.ContainerID)
 
 	default:
 		return event, fmt.Errorf("unknown action type %q, ignoring", ev.Action)

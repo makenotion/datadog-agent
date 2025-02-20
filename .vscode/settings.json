@@ -1,0 +1,3 @@
+{
+    "go.buildTags": "systemd,etcd,cri,consul,jetson,kubelet,containerd,kubeapiserver,orchestrator,trivy,docker,jmx,ec2,datadog.no_waf,zk,podman,oracle,zstd,netcgo,gce,process,crio,zlib,bundle_agent,otlp,apm",
+}
